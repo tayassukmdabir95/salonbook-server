@@ -3,10 +3,20 @@ import { mongodbAdapter } from "better-auth/adapters/mongodb"
 import { APIError, createAuthMiddleware } from "better-auth/api"
 import { db, mongoClient } from "./database.js"
 
-const { BETTER_AUTH_SECRET, BETTER_AUTH_URL, CLIENT_URL } = process.env
+const {
+  BETTER_AUTH_SECRET,
+  BETTER_AUTH_URL,
+  CLIENT_URL,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+} = process.env
 
 if (!BETTER_AUTH_SECRET || !BETTER_AUTH_URL || !CLIENT_URL) {
   throw new Error("BETTER_AUTH_SECRET, BETTER_AUTH_URL and CLIENT_URL are required.")
+}
+
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+  throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required.")
 }
 
 export const auth = betterAuth({
@@ -18,6 +28,12 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 6,
+  },
+  socialProviders: {
+    google: {
+      clientId: GOOGLE_CLIENT_ID,
+      clientSecret: GOOGLE_CLIENT_SECRET,
+    },
   },
   user: {
     modelName: "users",
