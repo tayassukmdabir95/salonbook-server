@@ -325,6 +325,7 @@ router.post(
           `${process.env.CLIENT_URL}/payment/cancel?appointment_id=${appointment._id}`,
       })
 
+      
       res.json({ url: session.url })
         } catch (error) {
       console.error("Stripe Checkout failed", {

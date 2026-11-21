@@ -9,6 +9,8 @@ import servicesRouter from "./routes/services.js"
 import appointmentsRouter from "./routes/appointments.js"
 import adminRouter from "./routes/admin.js"
 import profileRouter from "./routes/profile.js"
+import paymentsRouter, { stripeWebhook } from "./routes/payments.js"
+
 const app = express()
 const port = Number(process.env.PORT || 4000)
 
@@ -20,13 +22,19 @@ app.use(
 )
 
 app.all("/api/auth/{*path}", toNodeHandler(auth))
+
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  stripeWebhook,
+)
+
 app.use(express.json())
 app.use("/api", servicesRouter)
 app.use("/api", appointmentsRouter)
 app.use("/api/admin", adminRouter)
-
-
 app.use("/api/profile", profileRouter)
+app.use("/api", paymentsRouter)
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -88,6 +96,7 @@ app.get(
     }
   },
 )
+
 app.get(
   "/api/admin/overview",
   requireUser,
@@ -125,23 +134,33 @@ app.get(
     }
   },
 )
+
 async function startServer() {
   try {
     await connectDatabase()
-await db.collection("appointments").createIndex(
-  { appointmentDate: 1, timeSlot: 1 },
-  {
-    unique: true,
-    partialFilterExpression: {
-      status: { $in: ["pending", "confirmed"] },
-    },
-  },
-)
-console.log("MongoDB connection and booking index verified.")
-  } catch (error) {
-    console.error(
-      `MongoDB connection failed (${error.name}). Check your database credentials and network access.`,
+
+    await db.collection("appointments").createIndex(
+      { appointmentDate: 1, timeSlot: 1 },
+      {
+        unique: true,
+        partialFilterExpression: {
+          status: { $in: ["pending", "confirmed"] },
+        },
+      },
     )
+
+    await db.collection("transactions").createIndex(
+      { stripeSessionId: 1 },
+      { unique: true },
+    )
+
+    console.log("MongoDB connection and payment indexes verified.")
+  } catch (error) {
+    console.error("Server startup failed", {
+      name: error.name,
+      code: error.code,
+      message: error.message,
+    })
     await mongoClient.close()
     process.exitCode = 1
     return

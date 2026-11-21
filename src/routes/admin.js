@@ -156,4 +156,70 @@ router.patch("/users/:id/block", async (req, res) => {
   }
 })
 
+router.get("/transactions", async (req, res) => {
+  try {
+    const transactions = await db
+      .collection("transactions")
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray()
+
+    const appointmentIds = [
+      ...new Set(transactions.map((transaction) => transaction.appointmentId)),
+    ]
+    const customerIds = [
+      ...new Set(transactions.map((transaction) => transaction.customerId)),
+    ]
+
+    const [appointments, customers] = await Promise.all([
+      appointmentIds.length
+        ? db.collection("appointments").find({
+            _id: { $in: appointmentIds.map((id) => new ObjectId(id)) },
+          }).toArray()
+        : [],
+      customerIds.length
+        ? db.collection("users").find({
+            _id: { $in: customerIds.map((id) => new ObjectId(id)) },
+          }).project({ name: 1, email: 1 }).toArray()
+        : [],
+    ])
+
+    const serviceIds = [
+      ...new Set(appointments.map((appointment) => appointment.serviceId)),
+    ]
+    const services = serviceIds.length
+      ? await db.collection("services").find({
+          _id: { $in: serviceIds.map((id) => new ObjectId(id)) },
+        }).toArray()
+      : []
+
+    const appointmentsById = new Map(
+      appointments.map((appointment) => [String(appointment._id), appointment]),
+    )
+    const customersById = new Map(
+      customers.map((customer) => [String(customer._id), customer]),
+    )
+    const servicesById = new Map(
+      services.map((service) => [String(service._id), service]),
+    )
+
+    res.json({
+      transactions: transactions.map((transaction) => {
+        const appointment = appointmentsById.get(transaction.appointmentId)
+
+        return {
+          ...transaction,
+          appointmentDate: appointment?.appointmentDate || null,
+          customer: customersById.get(transaction.customerId) || null,
+          service: appointment
+            ? servicesById.get(appointment.serviceId) || null
+            : null,
+        }
+      }),
+    })
+  } catch {
+    res.status(500).json({ message: "Could not load transactions." })
+  }
+})
+
 export default router
