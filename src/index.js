@@ -7,6 +7,7 @@ import { connectDatabase, db, mongoClient } from "./config/database.js"
 import { requireRole, requireUser, signingKey } from "./middleware/requireUser.js"
 import servicesRouter from "./routes/services.js"
 import appointmentsRouter from "./routes/appointments.js"
+import adminRouter from "./routes/admin.js"
 
 const app = express()
 const port = Number(process.env.PORT || 4000)
@@ -22,6 +23,7 @@ app.all("/api/auth/{*path}", toNodeHandler(auth))
 app.use(express.json())
 app.use("/api", servicesRouter)
 app.use("/api", appointmentsRouter)
+app.use("/api/admin", adminRouter)
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -89,17 +91,37 @@ app.get(
   requireRole("admin"),
   async (req, res) => {
     try {
-      const totalCustomers = await db.collection("users").countDocuments({
-        role: "customer",
-      })
+      const appointments = db.collection("appointments")
 
-      res.json({ totalCustomers })
+      const [
+        totalCustomers,
+        totalActiveServices,
+        totalAppointments,
+        pendingAppointments,
+        confirmedAppointments,
+        totalSuccessfulPayments,
+      ] = await Promise.all([
+        db.collection("users").countDocuments({ role: "customer" }),
+        db.collection("services").countDocuments({ status: "active" }),
+        appointments.countDocuments({}),
+        appointments.countDocuments({ status: "pending" }),
+        appointments.countDocuments({ status: "confirmed" }),
+        db.collection("transactions").countDocuments({ status: "paid" }),
+      ])
+
+      res.json({
+        totalCustomers,
+        totalActiveServices,
+        totalAppointments,
+        pendingAppointments,
+        confirmedAppointments,
+        totalSuccessfulPayments,
+      })
     } catch {
       res.status(500).json({ message: "Could not load the admin overview." })
     }
   },
 )
-
 async function startServer() {
   try {
     await connectDatabase()
