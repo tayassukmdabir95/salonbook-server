@@ -136,3 +136,123 @@ router.post(
 )
 
 export default router
+
+
+router.get(
+  "/customer/appointments",
+  requireUser,
+  requireRole("customer"),
+  async (req, res) => {
+    try {
+      const appointments = await db
+        .collection("appointments")
+        .find({ customerId: req.user.id })
+        .sort({ createdAt: -1 })
+        .toArray()
+
+      const serviceIds = [
+        ...new Set(appointments.map((appointment) => appointment.serviceId)),
+      ]
+
+      const services = serviceIds.length
+        ? await db
+            .collection("services")
+            .find({
+              _id: { $in: serviceIds.map((id) => new ObjectId(id)) },
+            })
+            .toArray()
+        : []
+
+      const servicesById = new Map(
+        services.map((service) => [String(service._id), service]),
+      )
+
+      res.json({
+        appointments: appointments.map((appointment) => ({
+          ...appointment,
+          service: servicesById.get(appointment.serviceId) || null,
+        })),
+      })
+    } catch {
+      res.status(500).json({ message: "Could not load your appointments." })
+    }
+  },
+)
+
+router.get(
+  "/customer/appointments/:id",
+  requireUser,
+  requireRole("customer"),
+  async (req, res) => {
+    if (!ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ message: "Invalid appointment ID." })
+      return
+    }
+
+    try {
+      const appointment = await db.collection("appointments").findOne({
+        _id: new ObjectId(req.params.id),
+        customerId: req.user.id,
+      })
+
+      if (!appointment) {
+        res.status(404).json({ message: "Appointment not found." })
+        return
+      }
+
+      const service = await db.collection("services").findOne({
+        _id: new ObjectId(appointment.serviceId),
+      })
+
+      res.json({ appointment: { ...appointment, service } })
+    } catch {
+      res.status(500).json({ message: "Could not load this appointment." })
+    }
+  },
+)
+
+router.patch(
+  "/customer/appointments/:id/cancel",
+  requireUser,
+  requireRole("customer"),
+  async (req, res) => {
+    if (!ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ message: "Invalid appointment ID." })
+      return
+    }
+
+    const appointmentId = new ObjectId(req.params.id)
+
+    try {
+      const result = await db.collection("appointments").updateOne(
+        {
+          _id: appointmentId,
+          customerId: req.user.id,
+          status: "pending",
+        },
+        { $set: { status: "cancelled" } },
+      )
+
+      if (result.modifiedCount === 1) {
+        res.json({ message: "Appointment cancelled." })
+        return
+      }
+
+      const appointment = await db.collection("appointments").findOne({
+        _id: appointmentId,
+        customerId: req.user.id,
+      })
+
+      if (!appointment) {
+        res.status(404).json({ message: "Appointment not found." })
+        return
+      }
+
+      res.status(409).json({
+        message: "Only a pending appointment can be cancelled.",
+      })
+    } catch {
+      res.status(500).json({ message: "Could not cancel the appointment." })
+    }
+  },
+)

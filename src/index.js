@@ -56,20 +56,33 @@ app.get(
   requireRole("customer"),
   async (req, res) => {
     try {
-      const totalAppointments = await db.collection("appointments").countDocuments({
-        customerId: req.user.id,
-      })
+      const appointments = db.collection("appointments")
+      const customerId = req.user.id
+
+      const [
+        totalAppointments,
+        pendingAppointments,
+        confirmedAppointments,
+        cancelledAppointments,
+      ] = await Promise.all([
+        appointments.countDocuments({ customerId }),
+        appointments.countDocuments({ customerId, status: "pending" }),
+        appointments.countDocuments({ customerId, status: "confirmed" }),
+        appointments.countDocuments({ customerId, status: "cancelled" }),
+      ])
 
       res.json({
         name: req.user.name,
         totalAppointments,
+        pendingAppointments,
+        confirmedAppointments,
+        cancelledAppointments,
       })
     } catch {
       res.status(500).json({ message: "Could not load your overview." })
     }
   },
 )
-
 app.get(
   "/api/admin/overview",
   requireUser,
