@@ -5,6 +5,7 @@ import { toNodeHandler } from "better-auth/node"
 import { auth } from "./config/auth.js"
 import { connectDatabase, db, mongoClient } from "./config/database.js"
 import { requireRole, requireUser, signingKey } from "./middleware/requireUser.js"
+import servicesRouter from "./routes/services.js"
 
 const app = express()
 const port = Number(process.env.PORT || 4000)
@@ -18,6 +19,7 @@ app.use(
 
 app.all("/api/auth/{*path}", toNodeHandler(auth))
 app.use(express.json())
+app.use("/api", servicesRouter)
 
 app.get("/api/health", (req, res) => {
   res.json({
