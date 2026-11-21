@@ -134,7 +134,32 @@ app.get(
     }
   },
 )
+app.use("/api", (req, res) => {
+  res.status(404).json({ message: "API route not found." })
+})
 
+app.use((error, req, res, next) => {
+  if (res.headersSent) {
+    next(error)
+    return
+  }
+
+  const status = error.status || error.statusCode || 500
+
+  if (status >= 500) {
+    console.error("API request failed", {
+      name: error.name,
+      code: error.code,
+    })
+  }
+
+  res.status(status).json({
+    message:
+      status >= 500
+        ? "Something went wrong. Please try again."
+        : error.message || "Invalid request.",
+  })
+})
 async function startServer() {
   try {
     await connectDatabase()
