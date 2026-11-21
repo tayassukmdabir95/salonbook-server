@@ -8,7 +8,7 @@ import { requireRole, requireUser, signingKey } from "./middleware/requireUser.j
 import servicesRouter from "./routes/services.js"
 import appointmentsRouter from "./routes/appointments.js"
 import adminRouter from "./routes/admin.js"
-
+import profileRouter from "./routes/profile.js"
 const app = express()
 const port = Number(process.env.PORT || 4000)
 
@@ -24,6 +24,9 @@ app.use(express.json())
 app.use("/api", servicesRouter)
 app.use("/api", appointmentsRouter)
 app.use("/api/admin", adminRouter)
+
+
+app.use("/api/profile", profileRouter)
 
 app.get("/api/health", (req, res) => {
   res.json({
