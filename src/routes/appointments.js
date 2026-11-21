@@ -1,9 +1,11 @@
 import { Router } from "express"
 import { ObjectId } from "mongodb"
+import Stripe from "stripe"
 import { db } from "../config/database.js"
 import { requireRole, requireUser } from "../middleware/requireUser.js"
 
 const router = Router()
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
 const timeSlots = [
   "09:00",
@@ -135,9 +137,6 @@ router.post(
   },
 )
 
-export default router
-
-
 router.get(
   "/customer/appointments",
   requireUser,
@@ -256,3 +255,87 @@ router.patch(
     }
   },
 )
+
+router.post(
+  "/customer/appointments/:id/checkout",
+  requireUser,
+  requireRole("customer"),
+  async (req, res) => {
+    if (!ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ message: "Invalid appointment ID." })
+      return
+    }
+
+    try {
+      const appointment = await db.collection("appointments").findOne({
+        _id: new ObjectId(req.params.id),
+        customerId: req.user.id,
+      })
+
+      if (!appointment) {
+        res.status(404).json({ message: "Appointment not found." })
+        return
+      }
+
+      if (
+        appointment.status !== "confirmed" ||
+        appointment.paymentStatus !== "unpaid"
+      ) {
+        res.status(409).json({
+          message: "Only a confirmed, unpaid appointment can be paid.",
+        })
+        return
+      }
+
+      const service = await db.collection("services").findOne({
+        _id: new ObjectId(appointment.serviceId),
+      })
+
+      const amount = Math.round(Number(appointment.servicePrice) * 100)
+
+      if (!Number.isSafeInteger(amount) || amount <= 0) {
+        res.status(500).json({ message: "Invalid appointment price." })
+        return
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+       
+        customer_email: req.user.email,
+        client_reference_id: String(appointment._id),
+        line_items: [
+          {
+            price_data: {
+              currency: process.env.STRIPE_CURRENCY || "usd",
+              unit_amount: amount,
+              product_data: {
+                name: service?.serviceName || "Salon appointment",
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          appointmentId: String(appointment._id),
+          customerId: req.user.id,
+        },
+        success_url:
+          `${process.env.CLIENT_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url:
+          `${process.env.CLIENT_URL}/payment/cancel?appointment_id=${appointment._id}`,
+      })
+
+      res.json({ url: session.url })
+        } catch (error) {
+      console.error("Stripe Checkout failed", {
+        type: error.type,
+        code: error.code,
+        statusCode: error.statusCode,
+        message: error.message,
+      })
+      res.status(502).json({ message: "Could not start Stripe Checkout." })
+    }
+  },
+)
+
+export default router
