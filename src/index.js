@@ -6,6 +6,7 @@ import { auth } from "./config/auth.js"
 import { connectDatabase, db, mongoClient } from "./config/database.js"
 import { requireRole, requireUser, signingKey } from "./middleware/requireUser.js"
 import servicesRouter from "./routes/services.js"
+import appointmentsRouter from "./routes/appointments.js"
 
 const app = express()
 const port = Number(process.env.PORT || 4000)
@@ -20,6 +21,7 @@ app.use(
 app.all("/api/auth/{*path}", toNodeHandler(auth))
 app.use(express.json())
 app.use("/api", servicesRouter)
+app.use("/api", appointmentsRouter)
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -88,7 +90,16 @@ app.get(
 async function startServer() {
   try {
     await connectDatabase()
-    console.log("MongoDB connection verified.")
+await db.collection("appointments").createIndex(
+  { appointmentDate: 1, timeSlot: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: ["pending", "confirmed"] },
+    },
+  },
+)
+console.log("MongoDB connection and booking index verified.")
   } catch (error) {
     console.error(
       `MongoDB connection failed (${error.name}). Check your database credentials and network access.`,
