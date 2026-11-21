@@ -73,6 +73,28 @@ router.get("/services", async (req, res) => {
     res.status(500).json({ message: "Could not load services." })
   }
 })
+router.get("/services/:id", requireUser, async (req, res) => {
+  if (!validId(req.params.id)) {
+    res.status(400).json({ message: "Invalid service ID." })
+    return
+  }
+
+  try {
+    const service = await db.collection("services").findOne({
+      _id: new ObjectId(req.params.id),
+      status: "active",
+    })
+
+    if (!service) {
+      res.status(404).json({ message: "This service is unavailable." })
+      return
+    }
+
+    res.json({ service })
+  } catch {
+    res.status(500).json({ message: "Could not load this service." })
+  }
+})
 
 router.get(
   "/admin/services",
